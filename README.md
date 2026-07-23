@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/matheus3301/herdr-shortcut/actions/workflows/ci.yml/badge.svg)](https://github.com/matheus3301/herdr-shortcut/actions/workflows/ci.yml)
 [![Release](https://github.com/matheus3301/herdr-shortcut/actions/workflows/release.yml/badge.svg)](https://github.com/matheus3301/herdr-shortcut/actions/workflows/release.yml)
-[![Go 1.22+](https://img.shields.io/badge/go-1.22%2B-00ADD8?logo=go)](https://go.dev/)
+[![Go 1.26](https://img.shields.io/badge/go-1.26-00ADD8?logo=go)](https://go.dev/)
 [![Herdr 0.7.5+](https://img.shields.io/badge/herdr-0.7.5%2B-5B4FE9)](https://herdr.dev)
 [![Shortcut API v3](https://img.shields.io/badge/shortcut-API%20v3-7B68EE)](https://developer.shortcut.com/api/rest/v3)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -48,7 +48,7 @@ This is an illustrative text mock-up, not a real screenshot:
  ID       TYPE   STATE          TITLE                              AGE   DUE
  SC-4821  feat   In Progress    Add retry to the webhook worker      3h   2026-08-01
  SC-4790  bug    In Progress    Fix flaky checkout redirect          1d   ·
- SC-4763  chore  Ready          Bump Go toolchain to 1.23            2d   ·
+ SC-4763  chore  Ready          Bump Go toolchain to 1.26            2d   ·
  SC-4711  feat   Backlog        Team dashboard filters               5d   2026-08-10
  ↑↓ move · Enter launch · / filter · o open · r refresh · ? help · q quit
 ```
@@ -84,7 +84,8 @@ holds every kind the installed Herdr reports.
   `herdr agent` to see the kinds it reports; `agent.default_kind` must be one of
   them.
 - A [Shortcut API token](https://app.shortcut.com/settings/account/api-tokens).
-- Optional for building from source: Go 1.22+.
+- Optional for building from source: Go 1.26 (the single supported and tested
+  version; the repo pins it via `mise.toml`).
 
 ## Install
 
@@ -306,6 +307,11 @@ selected harness.
 
 ## Development
 
+The repository pins its toolchain with [mise](https://mise.jdx.dev): **Go 1.26**
+is the single supported and tested version. Run `mise install` once to match it,
+or prefix commands with `mise exec --`. CI and the release workflow use the same
+version.
+
 ```sh
 make help          # list targets
 make check         # fmt, tidy, vet, race tests, coverage, build
@@ -343,11 +349,10 @@ git push origin v0.1.0
 
 The release workflow requires an annotated/signed tag whose commit is on `main`,
 verifies the version match, runs the full test, security (`govulncheck`), and
-plugin-verification gates, builds the release binaries with a supported stable Go
-and scans them, and uses GoReleaser to publish `.tar.gz` archives,
-`checksums.txt`, and an SBOM for darwin/linux on amd64/arm64. CI never bumps or
-pushes commits. (Go 1.22 compatibility is enforced separately by the CI
-workflow.)
+plugin-verification gates, builds the release binaries with Go 1.26 (the single
+supported toolchain) and scans them, and uses GoReleaser to publish `.tar.gz`
+archives, `checksums.txt`, and an SBOM for darwin/linux on amd64/arm64. CI never
+bumps or pushes commits.
 
 ## Troubleshooting
 

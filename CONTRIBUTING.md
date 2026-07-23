@@ -5,7 +5,8 @@ how to set up a development environment and the quality bar for changes.
 
 ## Prerequisites
 
-- Go 1.22 or newer.
+- Go 1.26 — the single supported and tested version, pinned via `mise.toml`
+  (run `mise install`, or prefix commands with `mise exec --`).
 - A POSIX shell (`sh`) for the build and verification scripts.
 - Optionally, [Herdr](https://herdr.dev) v0.7.5+ for end-to-end verification.
   `make verify-plugin` can download an official Herdr binary if one is not

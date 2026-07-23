@@ -10,7 +10,7 @@ ROOT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 MANIFEST="$ROOT_DIR/herdr-plugin.toml"
 OUT_DIR="$ROOT_DIR/bin"
 OUT_BIN="$OUT_DIR/$BIN_NAME"
-MIN_GO_MINOR=22
+MIN_GO_MINOR=26
 
 log() { printf '%s\n' "herdr-shortcut build: $*" >&2; }
 fail() { log "error: $*"; exit 1; }
@@ -40,7 +40,10 @@ mkdir -p "$OUT_DIR"
 # Prefer building from the exact checkout when a compatible Go toolchain exists.
 go_compatible() {
   command -v go >/dev/null 2>&1 || return 1
-  gv="$(go version 2>/dev/null | sed -n 's/.*go\([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')"
+  # Inspect the toolchain already available on PATH. Without GOTOOLCHAIN=local,
+  # an older Go can auto-download 1.26 merely while checking its version,
+  # bypassing the smaller prebuilt-release fallback.
+  gv="$(GOTOOLCHAIN=local go version 2>/dev/null | sed -n 's/.*go\([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')"
   [ -n "$gv" ] || return 1
   gmajor="${gv%%.*}"
   gminor="${gv#*.}"
@@ -51,7 +54,7 @@ go_compatible() {
 
 if go_compatible; then
   log "building from source with $(go version)"
-  ( cd "$ROOT_DIR" && CGO_ENABLED=0 go build -trimpath -o "$OUT_BIN" ./cmd/herdr-shortcut )
+  ( cd "$ROOT_DIR" && GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o "$OUT_BIN" ./cmd/herdr-shortcut )
   log "built $OUT_BIN"
   exit 0
 fi

@@ -703,7 +703,8 @@ Non-goals for v0.1.0:
 Implementation is complete only when all of the following are true:
 
 - Every repository deliverable exists and contains real, coherent content.
-- The plugin can be built from a clean checkout with Go 1.22 or newer.
+- The plugin can be built from a clean checkout with Go 1.26 (the single
+  supported and tested toolchain, pinned via `mise.toml` and `go.mod`).
 - `make check` passes.
 - `go test -race ./...` passes.
 - `make verify-plugin` validates the manifest against official Herdr v0.7.5 in

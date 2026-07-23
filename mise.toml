@@ -1,0 +1,9 @@
+# Pins the toolchain for this repository. Go 1.26 is the single supported and
+# tested version: go.mod, the build script, CI, the release workflow, and the
+# documentation all target it, and a synchronization test keeps them in agreement
+# (internal/app/goversion_test.go).
+#
+# Activate it with `mise install` (installs Go 1.26 if missing) and run tools with
+# the pinned toolchain via `mise exec -- <command>`, e.g. `mise exec -- make check`.
+[tools]
+go = "1.26"

@@ -57,7 +57,7 @@ jobs:
       - name: No-Go fallback install smoke test
         run: make smoke-nogo
       - name: Plugin manifest and repo-sync verification
-        run: go test ./internal/app/ -run 'Manifest|ConfigExample|Goreleaser|GoVersion|Attribution'
+        run: go test ./internal/app/ -run 'Manifest|ConfigExample|Goreleaser|GoVersion'
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v7

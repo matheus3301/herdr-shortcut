@@ -39,9 +39,13 @@ jobs:
         run: make tidy-check
       - name: go vet
         run: make vet
-      - name: Tests with race detector and coverage
+      # Go 1.22's race runtime cannot execute on GitHub's newest macOS image
+      # (dyld rejects its test binaries for a missing LC_UUID). Keep the minimum
+      # toolchain compatibility check here; the stable-race job below runs the
+      # race detector on both operating systems.
+      - name: Tests and coverage
         run: |
-          make test-race
+          if [ "${{ runner.os }}" = "macOS" ]; then make test; else make test-race; fi
           make coverage COVERAGE_MIN=80
       - name: Build
         run: make build
@@ -66,6 +70,25 @@ jobs:
           name: coverage
           path: coverage.txt
           if-no-files-found: error
+
+  stable-race:
+    name: Race test stable Go (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          check-latest: true
+          cache: true
+      - name: Uncached race tests
+        run: go test -race -count=1 ./...
 
   verify-plugin:
     name: Verify plugin (${{ matrix.os }})

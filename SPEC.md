@@ -7,8 +7,9 @@ Repository: `https://github.com/matheus3301/herdr-shortcut`
 ## 1. Mission
 
 Build a polished Herdr plugin, written in Go, that shows the authenticated
-Shortcut user's active Stories in a fast terminal UI and launches a Claude Code
-agent to work on the selected Story.
+Shortcut user's active Stories in a fast terminal UI and launches any coding
+agent harness supported by the installed Herdr binary to work on the selected
+Story.
 
 The finished product must be installable as a normal Herdr community plugin:
 
@@ -28,13 +29,14 @@ Shortcut token, and must work on macOS and Linux on amd64 and arm64.
    the Stories in a responsive list.
 4. The user can navigate with the keyboard or mouse, filter locally, refresh,
    inspect a Story in the browser, and choose a Story to work on.
-5. Choosing a Story opens a launch dialog. The dialog selects a working
-   directory from the current Herdr context or configured repositories and lets
+5. Choosing a Story opens a launch dialog. The dialog selects an agent harness
+   from the kinds reported by the installed Herdr binary, selects a working
+   directory from the current Herdr context or configured repositories, and lets
    the user enter a custom directory.
 6. Clicking the launch control or pressing Enter creates a new tab in the
-   current Herdr workspace, starts Claude Code in that tab's root pane, and
-   submits a rich prompt containing the selected Story's current details.
-7. The popup exits, leaving the new Claude Code tab focused and working.
+   current Herdr workspace, starts the selected harness in that tab's root pane,
+   and submits a rich prompt containing the selected Story's current details.
+7. The popup exits, leaving the new agent tab focused and working.
 
 No Shortcut write operation is in scope for v0.1.0. The plugin is a read-only
 Shortcut client and a Herdr launcher.
@@ -66,11 +68,14 @@ Relevant guarantees:
   not alter tiled layout and close when the command exits.
 - `herdr tab create --workspace ID --cwd PATH --label LABEL --focus` returns
   `.result.tab.tab_id` and `.result.root_pane.pane_id`.
-- `herdr agent start NAME --kind claude --pane ID -- [native args...]` starts
-  Claude Code in an existing available shell pane and returns only when the
-  agent is detected and ready.
+- `herdr agent start NAME --kind KIND --pane ID -- [native args...]` starts the
+  selected supported harness in an existing available shell pane and returns
+  only when the agent is detected and ready.
 - `herdr agent prompt NAME TEXT` atomically submits a prompt.
 - Live agent names match `[a-z][a-z0-9_-]{0,31}` and must be unique.
+- Running bare `herdr agent` is the installed binary's authoritative discovery
+  surface and prints a machine-parseable `kinds:` line. Herdr v0.7.5 reports
+  `pi|claude|codex|gemini|cursor|devin|agy|cline|omp|mastracode|opencode|copilot|kimi|kiro|droid|amp|grok|hermes|kilo|qodercli|maki`.
 - Plugins should call the injected `HERDR_BIN_PATH` instead of assuming `herdr`
   is on `PATH`.
 
@@ -192,8 +197,9 @@ Requirements:
 - `open` opens or focuses the managed task-picker popup.
 - `tui` runs the interactive picker and is the manifest pane entrypoint.
 - `doctor` validates configuration, token resolution, Shortcut authentication,
-  required Herdr context, Claude Code availability through Herdr, and configured
-  repository directories. It prints no secret values.
+  required Herdr context, supported agent-kind discovery through Herdr, the
+  configured default kind, and configured repository directories. It prints no
+  secret values.
 - `version` prints a single stable machine-readable line containing the semantic
   version.
 - Invalid commands and invalid configuration exit nonzero with concise help.
@@ -225,12 +231,15 @@ request_timeout = "15s"
 token_command = []
 
 [agent]
-kind = "claude"
-args = []
-name_template = "sc-{id}"
-tab_label_template = "SC-{id}"
+default_kind = "claude"
+name_template = "sc-{id}-{kind}"
+tab_label_template = "SC-{id} {kind}"
 focus = true
 prompt_template = """...documented default..."""
+
+[agent.args_by_kind]
+claude = []
+codex = []
 
 [[repositories]]
 name = "Main repository"
@@ -255,10 +264,15 @@ Validate all config values with actionable field-specific errors:
 - Page size is 1-250.
 - Max Stories is 1-1,000 and no lower than page size.
 - Durations must be positive and bounded.
-- Agent kind for v0.1.0 must be `claude`.
+- `agent.default_kind` and every `agent.args_by_kind` key must be valid Herdr
+  kind identifiers. Runtime validation must confirm the default against the
+  kinds discovered from the installed Herdr binary.
+- Native arguments are argv arrays scoped to one kind and are passed only to the
+  selected harness.
 - Repository names are non-empty, paths are non-empty, and duplicate expanded
   paths are rejected.
-- Templates must parse and may use only documented placeholders.
+- Agent name and tab templates accept only `{id}` and `{kind}`. Prompt templates
+  accept only their documented placeholders.
 
 Expand `~` and environment variables in repository paths. Resolve symlinks only
 when validating an existing selected cwd; do not mutate paths in stored config.
@@ -348,7 +362,7 @@ Render explicit states for:
 - Empty assigned queue.
 - API/auth/rate-limit/network error with retry guidance.
 - Filter with no matches.
-- Launching Claude Code.
+- Launching the selected agent harness.
 - Launch failure without losing the selected Story.
 - Launch success before clean exit.
 
@@ -365,7 +379,8 @@ Implement at least:
 - `o`: open selected Story's `app_url` in the OS browser.
 - `r`: refresh API data.
 - `?`: toggle help.
-- `q`/Ctrl+C: quit when not editing a field.
+- `q`/Ctrl+C: quit when not editing a field, except while non-cancellable launch
+  orchestration is in flight and irreversible Herdr resources may be created.
 
 ### Mouse
 
@@ -374,8 +389,9 @@ testing derived from rendered geometry:
 
 - Wheel scroll moves the viewport.
 - Clicking a visible Story row selects it and opens the launch dialog.
+- Clicking the launch dialog's harness rows selects an agent kind.
 - Clicking the launch dialog's repository rows selects a cwd.
-- Clicking `Launch Claude` launches the agent.
+- Clicking `Launch agent` launches the selected harness.
 - Clicking `Cancel` returns to the list.
 - Clicks outside known hit regions do nothing.
 
@@ -388,11 +404,18 @@ coordinates disconnected from the renderer.
 Show:
 
 - Story ID and title.
-- Agent: `Claude Code`.
+- Agent-harness choices dynamically discovered from the installed Herdr binary,
+  with the configured default selected initially. Every kind reported by Herdr
+  must be available without an explicit plugin config entry.
 - Cwd choices, in order: current focused-pane cwd, current workspace cwd,
   configured repositories, and `Custom path...`, deduplicated after expansion.
-- The generated tab label and agent name.
-- `Launch Claude` and `Cancel` controls usable by mouse and keyboard.
+- The generated tab label and agent name, updated when the selected kind changes.
+- `Launch agent` and `Cancel` controls usable by mouse and keyboard.
+
+The harness and cwd regions must both be fully keyboard and mouse navigable in
+short terminals. The UI must clearly distinguish the two selection regions and
+show the currently selected kind. Kind discovery failure is an actionable Herdr
+error, never a silent fallback to a stale hard-coded list.
 
 Custom path input must validate that the path exists and is a directory before
 launch. Preserve the dialog and show the error inline when validation fails.
@@ -413,7 +436,7 @@ Use a deterministic template with a documented, tested placeholder set:
 
 ```text
 {id} {name} {url} {description} {story_type} {state} {labels}
-{estimate} {deadline} {branch_name} {team_id} {epic_id}
+{estimate} {deadline} {branch_name} {team_id} {epic_id} {kind}
 ```
 
 The default prompt must be equivalent in intent to:
@@ -421,6 +444,7 @@ The default prompt must be equivalent in intent to:
 ```text
 Work on Shortcut Story SC-{id}: {name}
 URL: {url}
+Agent harness: {kind}
 Type: {story_type}
 State: {state}
 Labels: {labels}
@@ -452,27 +476,32 @@ Implement a typed Herdr adapter around `exec.CommandContext`. The executable is
 `HERDR_BIN_PATH`, falling back to `herdr` only for standalone development.
 
 All commands must use argv and parse Herdr's JSON response envelopes. Preserve
-Herdr error codes/messages without dumping unbounded output.
+Herdr error codes/messages without dumping unbounded output. The one plain-text
+discovery call is bare `herdr agent`; parse and validate its `kinds:` line while
+tolerating unrelated help lines. Preserve Herdr's reported order, reject empty or
+invalid kind identifiers, deduplicate defensively, and do not substitute a
+compiled-in list when discovery fails.
 
 Launch algorithm:
 
-1. Validate selected cwd and render the prompt.
+1. Validate the selected kind against the kinds discovered from this installed
+   Herdr binary, validate selected cwd, and render the prompt.
 2. Read the active `workspace_id` from plugin context. If unavailable, query
    current Herdr state and return an actionable error if no workspace exists.
-3. Query `herdr agent list` and generate a unique valid name from
-   `sc-{story_id}`. Use `-2`, `-3`, and so on for collisions while staying within
-   32 characters.
+3. Query `herdr agent list` and generate a unique valid name from the configured
+   `{id}`/`{kind}` template. Use `-2`, `-3`, and so on for collisions while
+   staying within 32 characters.
 4. Run `herdr tab create --workspace <workspace> --cwd <cwd> --label <label>
    --focus` (or `--no-focus` when configured).
 5. Parse the new tab ID and root pane ID. Reject incomplete responses.
-6. Run `herdr agent start <name> --kind claude --pane <root-pane-id> --
-   <configured-agent-args...>`.
+6. Run `herdr agent start <name> --kind <selected-kind> --pane <root-pane-id> --
+   <arguments-configured-for-that-kind...>`.
 7. Run `herdr agent prompt <name> <rendered-prompt>` without `--wait`.
 8. Return a typed success containing tab ID, pane ID, and agent name. Exit the
    popup only after prompt submission succeeds.
 
-Do not use `pane run` to start Claude Code; the v0.7.5 `agent start` facade is the
-authoritative lifecycle-aware path.
+Do not use `pane run` to start any harness; the v0.7.5 `agent start` facade is the
+authoritative lifecycle-aware path for every supported kind.
 
 Failure semantics:
 
@@ -514,8 +543,8 @@ The committed repository must not contain built binaries or release archives.
 ## 15. Testing Requirements
 
 Use standard Go tests and `httptest`. Tests must be deterministic, parallel where
-safe, and must not require a real Shortcut token, network, Herdr session, or
-Claude account.
+safe, and must not require a real Shortcut token, network, Herdr session, or a
+real coding-agent account.
 
 Required coverage areas:
 
@@ -527,15 +556,17 @@ Required coverage areas:
   important error status.
 - Prompt placeholders, multiline descriptions, missing values, control
   characters, truncation, and invalid templates.
-- Herdr command argv for open, tab creation, agent listing, unique naming, agent
-  start, prompt submission, malformed JSON, nonzero exits, and partial failures.
+- Herdr command argv for open, tab creation, supported-kind discovery, agent
+  listing, unique naming, agent start for every discovered kind, prompt
+  submission, malformed JSON, nonzero exits, and partial failures.
 - Main TUI loading, empty, error, refresh, filter, selection, dialog, custom cwd,
   launch progress/success/failure, resize, keyboard, wheel, and mouse hit testing.
 - Browser opener OS dispatch and URL validation.
 - Manifest parsing and agreement among manifest version, binary version, release
   config, action IDs, pane IDs, and build paths.
-- An application-level test that drives a fake Shortcut client and fake Herdr
-  runner from Story selection through the exact Claude start and prompt calls.
+- Application-level table tests that drive a fake Shortcut client and fake Herdr
+  runner from Story selection through exact start and prompt calls for every
+  Herdr v0.7.5 kind, plus a future unknown-but-valid kind emitted by discovery.
 
 Run race tests in CI. Aim for meaningful package coverage rather than testing
 trivial getters; the aggregate statement coverage target is at least 80%.
@@ -618,7 +649,8 @@ The README must be production-grade and accurate. Include:
 - Architecture and data-flow overview.
 - Development, testing, plugin verification, and release instructions.
 - Troubleshooting for missing plugin commands, invalid token, rate limiting,
-  missing Claude Code, missing cwd, popup problems, and failed launch recovery.
+  unsupported/unavailable selected harnesses, missing cwd, popup problems, and
+  failed launch recovery.
 - Security model, limitations, contribution link, and MIT license.
 
 Explicitly note that some Homebrew `herdr 0.7.5` bottles have been observed to
@@ -632,13 +664,15 @@ tests where practical.
 ## 19. Open-Source Product Metadata
 
 - MIT license, copyright Matheus Monteiro and contributors.
-- Repository description: `Shortcut task picker and Claude Code launcher for
+- Repository description: `Shortcut task picker and coding-agent launcher for
   Herdr`.
-- Recommended GitHub topics: `herdr-plugin`, `shortcut`, `claude-code`, `golang`,
-  `tui`, `bubbletea`, `developer-tools`.
+- Recommended GitHub topics: `herdr-plugin`, `shortcut`, `coding-agents`,
+  `claude-code`, `codex`, `opencode`, `golang`, `tui`, `bubbletea`,
+  `developer-tools`.
 - Public issues enabled.
-- No analytics, telemetry, update pings, or hidden network requests. Network
-  access is limited to configured Shortcut API calls and explicit browser opens.
+- No analytics, telemetry, update pings, or hidden network requests from the
+  built-in client. Network access by the configured token command or selected
+  external coding harness is outside the plugin client and must be documented.
 
 ## 20. Quality Bar and Non-Goals
 
@@ -661,7 +695,6 @@ Non-goals for v0.1.0:
 - Creating Shortcut Stories.
 - Windows support.
 - Background polling, notifications, or webhooks.
-- Supporting non-Claude agents in the UI.
 - A daemon, database, browser UI, or native Herdr UI extension.
 - Automatic repository inference from labels or external links.
 
@@ -675,8 +708,9 @@ Implementation is complete only when all of the following are true:
 - `go test -race ./...` passes.
 - `make verify-plugin` validates the manifest against official Herdr v0.7.5 in
   isolated state.
-- A local mock end-to-end run demonstrates list -> mouse/keyboard select -> cwd
-  select -> exact `agent start --kind claude --pane` -> `agent prompt` behavior.
+- A local mock end-to-end run demonstrates list -> mouse/keyboard Story select ->
+  harness select -> cwd select -> exact `agent start --kind <selected> --pane` ->
+  `agent prompt` behavior for all v0.7.5 kinds and a future discovered kind.
 - The README install/config/usage commands match the implementation.
 - CI and release workflows are valid and least privilege.
 - No secret or generated binary is tracked.

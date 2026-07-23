@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege: CI only needs to read the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Compatibility gate: the module must keep building and passing on Go 1.22, the
+  # minimum supported toolchain (SPEC section 21). Release binaries are built with
+  # a stable Go in the release workflow.
+  test:
+    name: Test Go 1.22 (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.22'
+          check-latest: true
+          cache: true
+      - name: gofmt
+        run: make fmt-check
+      - name: go mod tidy
+        run: make tidy-check
+      - name: go vet
+        run: make vet
+      - name: Tests with race detector and coverage
+        run: |
+          make test-race
+          make coverage COVERAGE_MIN=80
+      - name: Build
+        run: make build
+      - name: Shell syntax
+        run: |
+          sh -n scripts/build.sh
+          sh -n scripts/verify-plugin.sh
+          sh -n scripts/smoke-nogo-install.sh
+      - name: Install script source-build smoke test
+        run: |
+          rm -rf bin
+          sh scripts/build.sh
+          ./bin/herdr-shortcut version
+      - name: No-Go fallback install smoke test
+        run: make smoke-nogo
+      - name: Plugin manifest verification
+        run: go test ./internal/app/ -run 'Manifest|ConfigExample|Goreleaser'
+      - name: Upload coverage
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage.txt
+          if-no-files-found: error
+
+  verify-plugin:
+    name: Verify plugin (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.22'
+          check-latest: true
+          cache: true
+      # Downloads the pinned official Herdr v0.7.5 (verified SHA-256) by default
+      # and validates the manifest against it in isolated state.
+      - name: make verify-plugin
+        run: make verify-plugin
+
+  goreleaser-check:
+    name: GoReleaser config check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+          check-latest: true
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: '~> v2'
+          args: check
+
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # Scan with a current stable Go — the toolchain release binaries are built
+      # with — so the vulnerability database and toolchain are up to date.
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+          check-latest: true
+          cache: true
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...

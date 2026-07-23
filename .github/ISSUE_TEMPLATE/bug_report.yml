@@ -1,0 +1,55 @@
+name: Bug report
+description: Report a problem with herdr-shortcut
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please do not include your Shortcut API token or
+        any secret in this issue.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+      placeholder: When I ..., I expected ..., but ...
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run `herdr-shortcut ...`
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `herdr-shortcut doctor`
+      description: This never prints your token. Paste the full output.
+      render: text
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: herdr-shortcut version
+      placeholder: 0.1.0 (from `herdr-shortcut version`)
+    validations:
+      required: true
+  - type: input
+    id: herdr-version
+    attributes:
+      label: Herdr version
+      placeholder: 0.7.5 (from `herdr --version`)
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS and architecture
+      placeholder: macOS 14 arm64 / Ubuntu 24.04 amd64
+    validations:
+      required: true

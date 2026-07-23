@@ -1,0 +1,99 @@
+# herdr-shortcut configuration example.
+#
+# Copy this file to one of the following locations (first match wins):
+#   1. $HERDR_PLUGIN_CONFIG_DIR/config.toml   (set by Herdr when run as a plugin)
+#   2. $XDG_CONFIG_HOME/herdr-shortcut/config.toml
+#   3. $HOME/.config/herdr-shortcut/config.toml
+#
+# Every value below is optional and shown at its built-in default. A missing
+# config file is valid as long as SHORTCUT_API_TOKEN is set (or token_command is
+# configured) and the current Herdr pane has a working directory.
+#
+# The Shortcut API token is NEVER read from this file. Provide it via the
+# SHORTCUT_API_TOKEN environment variable or the token_command below.
+
+[shortcut]
+# Shortcut REST API v3 base URL. Must be absolute HTTPS (HTTP is allowed only for
+# loopback hosts, for local testing).
+api_base_url = "https://api.app.shortcut.com/api/v3"
+
+# Search query template. The only placeholder is {member}, replaced with your
+# Shortcut mention name. Operators use AND semantics.
+query = "owner:{member} is:story !is:done !is:archived"
+
+# Stories fetched per API page (1-250).
+page_size = 100
+
+# Maximum Stories to fetch in total (1-1000, and never lower than page_size).
+max_stories = 250
+
+# Per-request timeout. Must be a positive Go duration no greater than 5m.
+request_timeout = "15s"
+
+# Optional argv command that prints the Shortcut token to stdout. It is executed
+# directly (never through a shell) only when SHORTCUT_API_TOKEN is unset. One
+# trailing newline is trimmed from the output.
+#
+# Examples (uncomment one):
+#   token_command = ["security", "find-generic-password", "-s", "shortcut-token", "-w"]
+#   token_command = ["op", "read", "op://Private/Shortcut/token"]
+token_command = []
+
+[agent]
+# The harness is chosen per launch from the kinds the installed Herdr binary
+# reports (discovered by running `herdr agent`). default_kind is the initial
+# selection and must be one of those discovered kinds.
+default_kind = "claude"
+
+# Agent name and tab-label templates. Placeholders: {id} and {kind}. The
+# rendered name is sanitized to match [a-z][a-z0-9_-]{0,31} and made unique.
+name_template = "sc-{id}-{kind}"
+tab_label_template = "SC-{id} {kind}"
+
+# Focus the newly created tab after launch.
+focus = true
+
+# Prompt handed to the selected agent harness. Placeholders: {id} {name} {url}
+# {description} {story_type} {state} {labels} {estimate} {deadline} {branch_name}
+# {team_id} {epic_id} {kind}. Use {{ and }} for literal braces.
+#
+# Limits: control characters and Unicode format/line-separator characters are
+# normalized (single-value fields are flattened to one line; the description
+# keeps meaningful newlines). Each short field is capped at 1024 characters, the
+# description at 8000, and the whole rendered prompt at 16000, with a
+# "…[truncated]" marker when shortened.
+prompt_template = """
+Work on Shortcut Story SC-{id}: {name}
+URL: {url}
+Agent harness: {kind}
+Type: {story_type}
+State: {state}
+Labels: {labels}
+Suggested branch: {branch_name}
+
+Description:
+{description}
+
+Inspect this repository and its instructions before changing anything. Implement
+the Story end to end with the smallest correct change, add or update tests, run
+the relevant verification, and summarize the result. Do not change the Shortcut
+Story itself unless the user explicitly asks you to.
+"""
+
+# Optional native arguments passed to a specific harness after the "--"
+# separator. Keys must be valid Herdr kind identifiers.
+#
+# [agent.args_by_kind]
+# codex = ["-m", "gpt-5"]
+# claude = []
+
+# Optional working-directory choices offered in the launch dialog. Leading ~ and
+# environment variables are expanded. Duplicate expanded paths are rejected.
+#
+# [[repositories]]
+# name = "Main repository"
+# path = "~/src/main"
+#
+# [[repositories]]
+# name = "Infra"
+# path = "$HOME/src/infra"

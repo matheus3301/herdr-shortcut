@@ -1,0 +1,55 @@
+# GoReleaser configuration. Produces static binaries for darwin/linux on
+# amd64/arm64, .tar.gz archives, a checksums.txt, and an SBOM.
+version: 2
+
+project_name: herdr-shortcut
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: herdr-shortcut
+    main: ./cmd/herdr-shortcut
+    binary: herdr-shortcut
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    # Must stay in sync with scripts/build.sh (enforced by tests):
+    # herdr-shortcut_<version>_<os>_<arch>.tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+sboms:
+  - id: archive
+    artifacts: archive
+
+release:
+  github:
+    owner: matheus3301
+    name: herdr-shortcut
+  prerelease: auto
+
+changelog:
+  use: github
+  sort: asc

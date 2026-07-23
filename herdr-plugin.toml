@@ -1,0 +1,36 @@
+id = "matheus3301.shortcut"
+name = "Shortcut"
+version = "0.1.0"
+min_herdr_version = "0.7.5"
+description = "Shortcut task picker and coding-agent launcher for Herdr"
+platforms = ["linux", "macos"]
+
+# Built at install time. Prefers a local Go toolchain and otherwise downloads a
+# checksum-verified release archive. See scripts/build.sh.
+[[build]]
+command = ["sh", "scripts/build.sh"]
+platforms = ["linux", "macos"]
+
+# Action shown in Herdr; opens the task-picker popup.
+[[actions]]
+id = "open"
+title = "Shortcut: My tasks"
+contexts = ["workspace", "tab", "pane"]
+command = ["./bin/herdr-shortcut", "open"]
+
+# Diagnostics action; view its output with
+# `herdr plugin log list --plugin matheus3301.shortcut`.
+[[actions]]
+id = "doctor"
+title = "Shortcut: Doctor"
+contexts = ["global"]
+command = ["./bin/herdr-shortcut", "doctor"]
+
+# The task-picker popup pane.
+[[panes]]
+id = "tasks"
+title = "Shortcut"
+placement = "popup"
+width = "90%"
+height = "80%"
+command = ["./bin/herdr-shortcut", "tui"]

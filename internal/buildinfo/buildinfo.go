@@ -4,7 +4,7 @@ package buildinfo
 
 // Version is the semantic version of herdr-shortcut. It must match the version
 // field in herdr-plugin.toml and the release tag (enforced by tests).
-const Version = "0.1.0"
+const Version = "0.1.1"
 
 // Name is the program name.
 const Name = "herdr-shortcut"

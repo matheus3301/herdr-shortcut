@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/matheus3301/herdr-shortcut/internal/config"
 	"github.com/matheus3301/herdr-shortcut/internal/herdr"
@@ -103,7 +104,7 @@ func TestVersionCommand(t *testing.T) {
 		if code != 0 {
 			t.Errorf("%s exit = %d", arg, code)
 		}
-		if !strings.Contains(out.String(), "0.1.0") {
+		if !strings.Contains(out.String(), "0.1.1") {
 			t.Errorf("%s output = %q", arg, out.String())
 		}
 	}
@@ -195,7 +196,12 @@ func newLaunchApp(srvURL string, getenv func(string) string, runner herdr.Runner
 		// Launch tests use synthetic cwds like "/repo"; a passthrough validator
 		// keeps them without touching the real filesystem. Tests that exercise the
 		// real revalidation set env.DirValidator to nil (or their own).
-		env:     Environment{Getenv: getenv, HerdrRunner: runner, DirValidator: func(p string) (string, error) { return p, nil }},
+		env: Environment{
+			Getenv:       getenv,
+			HerdrRunner:  runner,
+			DirValidator: func(p string) (string, error) { return p, nil },
+			Sleep:        func(context.Context, time.Duration) error { return nil },
+		},
 		cfg:     cfg,
 		herdr:   herdr.New("herdr", runner),
 		ctxInfo: herdr.InvocationContext{WorkspaceID: "ws1"},

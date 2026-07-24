@@ -247,10 +247,12 @@ been delivered.
    lengths capped).
 3. A unique agent name is generated from your `{id}`/`{kind}` template.
 4. A new focused tab is created in the current workspace with your chosen cwd.
-5. The selected harness is started in that tab's root pane
+5. The plugin waits up to five seconds for the new root shell to finish startup;
+   only Herdr's transient `agent_pane_busy` response is retried.
+6. The selected harness is started in that tab's root pane
    (`herdr agent start … --kind <selected> --pane … -- <args for that kind>`).
-6. The prompt is submitted (`herdr agent prompt …`).
-7. The popup closes, leaving the new agent tab focused and working.
+7. The prompt is submitted (`herdr agent prompt …`).
+8. The popup closes, leaving the new agent tab focused and working.
 
 If a step after tab creation fails, the tab is **not** closed and the failure is
 reported with the tab/pane IDs and an exact, copyable recovery command that
@@ -343,8 +345,8 @@ version matches `herdr-plugin.toml` and `internal/buildinfo`, on a commit that i
 already on `main`:
 
 ```sh
-git tag -a v0.1.0 -m "herdr-shortcut v0.1.0"
-git push origin v0.1.0
+git tag -a v0.1.1 -m "herdr-shortcut v0.1.1"
+git push origin v0.1.1
 ```
 
 The release workflow requires an annotated/signed tag whose commit is on `main`,
@@ -395,7 +397,7 @@ bumps or pushes commits.
 
 See [SECURITY.md](SECURITY.md) to report vulnerabilities.
 
-## Limitations (v0.1.0)
+## Limitations (v0.1.1)
 
 No Shortcut writes, Story creation, Windows support, background polling, or
 notifications. See the specification's non-goals.

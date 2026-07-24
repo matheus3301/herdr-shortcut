@@ -39,7 +39,10 @@ type Environment struct {
 	HerdrRunner herdr.Runner
 	TokenRunner config.CommandRunner
 	Now         func() time.Time
-	Browser     *browser.Opener
+	// Sleep is an injectable context-aware delay used while a newly created pane
+	// finishes shell startup. It defaults to a real timer.
+	Sleep   func(context.Context, time.Duration) error
+	Browser *browser.Opener
 	// RunTUI runs the interactive program; defaults to tui.Run.
 	RunTUI func(tui.Deps) (tui.Model, error)
 	// DirValidator revalidates/canonicalizes a selected cwd immediately before

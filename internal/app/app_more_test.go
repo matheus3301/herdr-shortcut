@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/matheus3301/herdr-shortcut/internal/config"
 	"github.com/matheus3301/herdr-shortcut/internal/herdr"
@@ -468,6 +470,104 @@ func TestReconcileAmbiguousStartSucceeds(t *testing.T) {
 	}
 }
 
+func TestTransientPaneBusyWaitsForShellStartup(t *testing.T) {
+	t.Parallel()
+	srv := freshStoryServer(t)
+	defer srv.Close()
+	var rec [][]string
+	base := recordingHerdr(&rec)
+	startCalls := 0
+	runner := func(ctx context.Context, bin string, args []string) (herdr.CommandResult, error) {
+		if len(args) >= 2 && args[0] == "agent" && args[1] == "start" {
+			rec = append(rec, args)
+			startCalls++
+			if startCalls <= 3 {
+				return herdr.CommandResult{Stderr: []byte(`{"error":{"code":"agent_pane_busy","message":"not an available shell"}}`), ExitCode: 1}, nil
+			}
+			return agentStartedEnvelope(args), nil
+		}
+		return base(ctx, bin, args)
+	}
+	a := newLaunchApp(srv.URL, envFrom(map[string]string{"SHORTCUT_API_TOKEN": "tok-test-secret"}), runner)
+	sleeps := 0
+	a.env.Sleep = func(context.Context, time.Duration) error {
+		sleeps++
+		return nil
+	}
+	res := a.launch(context.Background(), launchStory(), "/repo", "claude")
+	if res.Err != nil {
+		t.Fatalf("launch should wait through transient pane busy errors: %v", res.Err)
+	}
+	if res.Stage != tui.StageComplete {
+		t.Fatalf("stage = %v, want complete", res.Stage)
+	}
+	if startCalls != 4 || sleeps != 3 {
+		t.Fatalf("start calls=%d sleeps=%d, want 4 and 3", startCalls, sleeps)
+	}
+}
+
+func TestPermanentPaneBusyStopsAfterReadinessWindow(t *testing.T) {
+	t.Parallel()
+	srv := freshStoryServer(t)
+	defer srv.Close()
+	var rec [][]string
+	base := recordingHerdr(&rec)
+	startCalls := 0
+	runner := func(ctx context.Context, bin string, args []string) (herdr.CommandResult, error) {
+		if len(args) >= 2 && args[0] == "agent" && args[1] == "start" {
+			rec = append(rec, args)
+			startCalls++
+			return herdr.CommandResult{Stderr: []byte(`{"error":{"code":"agent_pane_busy","message":"not an available shell"}}`), ExitCode: 1}, nil
+		}
+		return base(ctx, bin, args)
+	}
+	a := newLaunchApp(srv.URL, envFrom(map[string]string{"SHORTCUT_API_TOKEN": "tok-test-secret"}), runner)
+	sleeps := 0
+	a.env.Sleep = func(context.Context, time.Duration) error {
+		sleeps++
+		return nil
+	}
+	res := a.launch(context.Background(), launchStory(), "/repo", "claude")
+	if res.Err == nil || !strings.Contains(res.Err.Error(), "did not become available") {
+		t.Fatalf("expected bounded shell-readiness error, got %v", res.Err)
+	}
+	if res.Stage != tui.StageTabCreated {
+		t.Fatalf("stage = %v, want tab-created recovery", res.Stage)
+	}
+	if startCalls != agentPaneReadyMaxAttempts || sleeps != agentPaneReadyMaxAttempts-1 {
+		t.Fatalf("start calls=%d sleeps=%d, want %d and %d", startCalls, sleeps, agentPaneReadyMaxAttempts, agentPaneReadyMaxAttempts-1)
+	}
+}
+
+func TestPaneBusyCancellationStopsRetriesAndPrompt(t *testing.T) {
+	t.Parallel()
+	srv := freshStoryServer(t)
+	defer srv.Close()
+	var rec [][]string
+	base := recordingHerdr(&rec)
+	startCalls, promptCalls := 0, 0
+	runner := func(ctx context.Context, bin string, args []string) (herdr.CommandResult, error) {
+		if len(args) >= 2 && args[0] == "agent" && args[1] == "start" {
+			rec = append(rec, args)
+			startCalls++
+			return herdr.CommandResult{Stderr: []byte(`{"error":{"code":"agent_pane_busy","message":"not an available shell"}}`), ExitCode: 1}, nil
+		}
+		if len(args) >= 2 && args[0] == "agent" && args[1] == "prompt" {
+			promptCalls++
+		}
+		return base(ctx, bin, args)
+	}
+	a := newLaunchApp(srv.URL, envFrom(map[string]string{"SHORTCUT_API_TOKEN": "tok-test-secret"}), runner)
+	a.env.Sleep = func(context.Context, time.Duration) error { return context.Canceled }
+	res := a.launch(context.Background(), launchStory(), "/repo", "claude")
+	if !errors.Is(res.Err, context.Canceled) {
+		t.Fatalf("launch error = %v, want context cancellation", res.Err)
+	}
+	if startCalls != 1 || promptCalls != 0 {
+		t.Fatalf("start calls=%d prompt calls=%d, want 1 and 0", startCalls, promptCalls)
+	}
+}
+
 func TestNameCollisionRegenerates(t *testing.T) {
 	t.Parallel()
 	srv := freshStoryServer(t)
@@ -559,6 +659,7 @@ func TestFailedRetryReturnsSecondError(t *testing.T) {
 	t.Parallel()
 	srv := freshStoryServer(t)
 	defer srv.Close()
+	startCalls := 0
 	runner := func(_ context.Context, _ string, args []string) (herdr.CommandResult, error) {
 		switch {
 		case args[0] == "agent" && args[1] == "list":
@@ -566,6 +667,7 @@ func TestFailedRetryReturnsSecondError(t *testing.T) {
 		case args[0] == "tab" && args[1] == "create":
 			return okEnvelope(`{"result":{"type":"tab_created","tab":{"tab_id":"tab-1"},"root_pane":{"pane_id":"pane-1"}}}`), nil
 		case args[0] == "agent" && args[1] == "start":
+			startCalls++
 			if args[2] == "sc-42-claude" {
 				return herdr.CommandResult{Stderr: []byte(`{"error":{"code":"agent_name_taken","message":"first-collision-reason"}}`), ExitCode: 1}, nil
 			}
@@ -588,6 +690,9 @@ func TestFailedRetryReturnsSecondError(t *testing.T) {
 	}
 	if res.Stage != tui.StageTabCreated {
 		t.Errorf("stage = %v, want StageTabCreated", res.Stage)
+	}
+	if startCalls != agentPaneReadyMaxAttempts {
+		t.Errorf("start calls = %d, want one shared budget of %d", startCalls, agentPaneReadyMaxAttempts)
 	}
 }
 

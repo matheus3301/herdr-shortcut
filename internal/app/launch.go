@@ -6,12 +6,18 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 
 	"github.com/matheus3301/herdr-shortcut/internal/herdr"
 	"github.com/matheus3301/herdr-shortcut/internal/prompt"
 	"github.com/matheus3301/herdr-shortcut/internal/shortcut"
 	"github.com/matheus3301/herdr-shortcut/internal/tui"
+)
+
+const (
+	agentPaneReadyRetryInterval = 100 * time.Millisecond
+	agentPaneReadyMaxAttempts   = 50
 )
 
 // validateLaunchInputs rejects an empty rendered prompt and any per-kind native
@@ -196,7 +202,8 @@ func (a *App) finishLaunch(ctx context.Context, base tui.LaunchResult, promptTex
 // returns the second (retry) error, which describes the start that actually ran.
 func (a *App) ensureAgentStarted(ctx context.Context, name, baseName, kind, paneID string) (string, error) {
 	args := a.cfg.Agent.ArgsByKind[kind]
-	startErr := a.herdr.StartAgent(ctx, name, kind, paneID, args)
+	readyAttempts := agentPaneReadyMaxAttempts
+	startErr := a.startAgentWhenPaneReady(ctx, name, kind, paneID, args, &readyAttempts)
 	if startErr == nil {
 		return name, nil
 	}
@@ -214,7 +221,7 @@ func (a *App) ensureAgentStarted(ctx context.Context, name, baseName, kind, pane
 			// The colliding name is off-limits even if the fresh list omits it.
 			taken := append(append([]string{}, names...), name)
 			if fresh := herdr.UniqueAgentName(baseName, taken); fresh != name {
-				e2 := a.herdr.StartAgent(ctx, fresh, kind, paneID, args)
+				e2 := a.startAgentWhenPaneReady(ctx, fresh, kind, paneID, args, &readyAttempts)
 				if e2 == nil {
 					return fresh, nil
 				}
@@ -226,6 +233,50 @@ func (a *App) ensureAgentStarted(ctx context.Context, name, baseName, kind, pane
 		}
 	}
 	return name, fmt.Errorf("start agent %q: %w", kind, startErr)
+}
+
+// startAgentWhenPaneReady handles the short race between tab creation and the
+// root shell finishing its startup files. Herdr returns agent_pane_busy while a
+// startup helper (for example, `brew shellenv`) still shares the shell's
+// foreground job. Retrying that one structured error is safe: Herdr has not
+// begun an agent launch. Every other error returns immediately. The caller owns
+// one shared attempt budget so a later name-collision retry cannot start a
+// second readiness window.
+func (a *App) startAgentWhenPaneReady(ctx context.Context, name, kind, paneID string, args []string, attemptsRemaining *int) error {
+	var lastErr error
+	for attemptsRemaining != nil && *attemptsRemaining > 0 {
+		(*attemptsRemaining)--
+		lastErr = a.herdr.StartAgent(ctx, name, kind, paneID, args)
+		if lastErr == nil {
+			return nil
+		}
+		var he *herdr.HerdrError
+		if !errors.As(lastErr, &he) || he.Code != "agent_pane_busy" {
+			return lastErr
+		}
+		if *attemptsRemaining == 0 {
+			break
+		}
+		if err := a.sleep(ctx, agentPaneReadyRetryInterval); err != nil {
+			return fmt.Errorf("wait for new pane shell: %w", err)
+		}
+	}
+	return fmt.Errorf("new pane shell did not become available within %s: %w",
+		time.Duration(agentPaneReadyMaxAttempts)*agentPaneReadyRetryInterval, lastErr)
+}
+
+func (a *App) sleep(ctx context.Context, d time.Duration) error {
+	if a.env.Sleep != nil {
+		return a.env.Sleep(ctx, d)
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // agentLiveOnPane reports whether the named agent of the given kind is live on

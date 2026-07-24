@@ -1,6 +1,6 @@
 # herdr-shortcut Product and Implementation Specification
 
-Status: implementation contract for v0.1.0
+Status: implementation contract for v0.1.1
 
 Repository: `https://github.com/matheus3301/herdr-shortcut`
 
@@ -38,7 +38,7 @@ Shortcut token, and must work on macOS and Linux on amd64 and arm64.
    and submits a rich prompt containing the selected Story's current details.
 7. The popup exits, leaving the new agent tab focused and working.
 
-No Shortcut write operation is in scope for v0.1.0. The plugin is a read-only
+No Shortcut write operation is in scope for v0.1.1. The plugin is a read-only
 Shortcut client and a Herdr launcher.
 
 ## 3. Authoritative External Contracts
@@ -163,7 +163,7 @@ Create a valid `herdr-plugin.toml` with:
 
 - ID `matheus3301.shortcut`.
 - Name `Shortcut`.
-- Version `0.1.0`.
+- Version `0.1.1`.
 - Minimum Herdr version `0.7.5`.
 - Platforms `linux` and `macos`.
 - A Unix build command: `sh scripts/build.sh`.
@@ -172,7 +172,7 @@ Create a valid `herdr-plugin.toml` with:
 - A pane with local ID `tasks`, title `Shortcut`, placement `popup`, width
   `90%`, height `80%`, invoking `./bin/herdr-shortcut tui`.
 
-Do not claim Windows support in v0.1.0. Do not install a default global
+Do not claim Windows support in v0.1.1. Do not install a default global
 keybinding that may conflict with the user's configuration. Document an optional
 keybinding in the README.
 
@@ -494,10 +494,12 @@ Launch algorithm:
 4. Run `herdr tab create --workspace <workspace> --cwd <cwd> --label <label>
    --focus` (or `--no-focus` when configured).
 5. Parse the new tab ID and root pane ID. Reject incomplete responses.
-6. Run `herdr agent start <name> --kind <selected-kind> --pane <root-pane-id> --
+6. Wait up to five seconds for the new root shell to finish startup, retrying
+   only Herdr's structured `agent_pane_busy` response.
+7. Run `herdr agent start <name> --kind <selected-kind> --pane <root-pane-id> --
    <arguments-configured-for-that-kind...>`.
-7. Run `herdr agent prompt <name> <rendered-prompt>` without `--wait`.
-8. Return a typed success containing tab ID, pane ID, and agent name. Exit the
+8. Run `herdr agent prompt <name> <rendered-prompt>` without `--wait`.
+9. Return a typed success containing tab ID, pane ID, and agent name. Exit the
    popup only after prompt submission succeeds.
 
 Do not use `pane run` to start any harness; the v0.7.5 `agent start` facade is the
@@ -558,7 +560,8 @@ Required coverage areas:
   characters, truncation, and invalid templates.
 - Herdr command argv for open, tab creation, supported-kind discovery, agent
   listing, unique naming, agent start for every discovered kind, prompt
-  submission, malformed JSON, nonzero exits, and partial failures.
+  submission, transient/permanent `agent_pane_busy`, malformed JSON, nonzero
+  exits, and partial failures.
 - Main TUI loading, empty, error, refresh, filter, selection, dialog, custom cwd,
   launch progress/success/failure, resize, keyboard, wheel, and mouse hit testing.
 - Browser opener OS dispatch and URL validation.
@@ -689,7 +692,7 @@ Quality bar:
 - Public APIs and non-obvious security/concurrency logic have succinct comments.
 - `go test -race ./...` and `make check` pass from a clean checkout.
 
-Non-goals for v0.1.0:
+Non-goals for v0.1.1:
 
 - Updating Story status, owners, comments, or fields.
 - Creating Shortcut Stories.
